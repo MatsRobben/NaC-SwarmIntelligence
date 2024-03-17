@@ -30,6 +30,7 @@ BOUNCE_OF_EDGES = False
 N = 20  # ABC population size
 NB = 15  # Boids per simulation
 MAX_ITER = 300
+EPSILONS = [1.0, 0.5, 0.25, 0.1, 0.05]
 
 class Boid:
     def __init__(self, x, y):
@@ -147,7 +148,8 @@ def pygame_sim():
 
         for boid in flock:
             # boid.update(flock, COHESION_WEIGHT, ALIGNMENT_WEIGHT, SEPARATION_WEIGHT)
-            boid.update(flock, 0.23352224616661899, 0.9574128366784478, 0.015213679227157537)
+            # Insert values from approxemated posterior
+            boid.update(flock, 0.7691528004956708, 0.7354003407767408, 0.7638551431684819)
 
         draw_boids(screen, flock)
 
@@ -206,9 +208,8 @@ def simulate_boids(cohesion, alignment, separation, warmup=True):
 def run_abc():
     population = create_population()
     accepted_params = []
-    epsilons = [1.0, 0.5, 0.25, 0.1, 0.05]
 
-    for epsilon in epsilons:
+    for epsilon in EPSILONS:
         print(f"Running ABC with epsilon: {epsilon}")
         accepted = []
         for i in range(N):
@@ -217,7 +218,7 @@ def run_abc():
             while True:
                 candidate_params = population[i]
                 final_order_parameter = simulate_boids(*candidate_params)
-                if final_order_parameter >= 1 - epsilon:
+                if final_order_parameter >= 0.6 - epsilon:
                     end_time = time.time()  # End timing
                     time_taken = end_time - start_time
                     accepted.append(candidate_params)
@@ -237,8 +238,6 @@ def run_abc():
         with open(f"accepted_params/accepted_params_{i}.txt", "w") as file:
             for params in accepted:
                 file.write(f"{params[0]}, {params[1]}, {params[2]}\n")
-
-
 
 def main(visualise=True):
     
@@ -270,6 +269,86 @@ def main(visualise=True):
     else:
         run_abc()
 
+def plot_accepted_params(folder_path):
+    all_accepted_params = []
+
+    for file_name in os.listdir(folder_path):
+        if file_name.endswith(".txt"):
+            accepted_params = []
+            with open(os.path.join(folder_path, file_name), "r") as file:
+                lines = file.readlines()
+                params = [[float(val) for val in line.strip().split(",")] for line in lines]
+                accepted_params.extend(params)
+            all_accepted_params.append(accepted_params)
+
+    plt.figure(figsize=(15, 10))
+
+    for i, accepted_params in enumerate(all_accepted_params):
+        param_1 = [params[0] for params in accepted_params]
+        param_2 = [params[1] for params in accepted_params]
+        param_3 = [params[2] for params in accepted_params]
+
+        plt.subplot(3, len(all_accepted_params), i + 1)
+        plt.hist(param_1, bins=30, edgecolor='black')
+        plt.title(f'Parameter 1 (Epsilon={EPSILONS[i]})')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+
+        plt.subplot(3, len(all_accepted_params), i + len(all_accepted_params) + 1)
+        plt.hist(param_2, bins=30, edgecolor='black')
+        plt.title(f'Parameter 2 (Epsilon={EPSILONS[i]})')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+
+        plt.subplot(3, len(all_accepted_params), i + 2 * len(all_accepted_params) + 1)
+        plt.hist(param_3, bins=30, edgecolor='black')
+        plt.title(f'Parameter 3 (Epsilon={EPSILONS[i]})')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_accepted_params_stacked(folder_path, epsilons, save_path=None):
+    all_accepted_params = []
+
+    param_names = ['Cohesion', 'Alignment', 'Separation']
+
+    for i, epsilon in enumerate(epsilons):
+        accepted_params = []
+        with open(os.path.join(folder_path, f"accepted_params_{i}.txt"), "r") as file:
+            lines = file.readlines()
+            params = [[float(val) for val in line.strip().split(",")] for line in lines]
+            accepted_params.extend(params)
+        all_accepted_params.append(accepted_params)
+
+    plt.figure(figsize=(10, 2 * len(epsilons)))
+
+    for i, accepted_params in enumerate(all_accepted_params):
+        param_values = np.array(accepted_params)
+
+        plt.subplot(len(epsilons), 1, i + 1)
+        plt.hist(param_values[:, 0], bins=30, color='r', alpha=0.5, label=param_names[0], stacked=True)
+        plt.hist(param_values[:, 1], bins=30, color='g', alpha=0.5, label=param_names[1], stacked=True)
+        plt.hist(param_values[:, 2], bins=30, color='b', alpha=0.5, label=param_names[2], stacked=True)
+        plt.title(f'Epsilon={epsilons[i]}')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+        plt.legend()
+
+    plt.tight_layout()
+    
+    # Save the plot if save_path is provided
+    if save_path:
+        plt.savefig(save_path)
+    
+    plt.show()
+
 if __name__ == "__main__":
     # Turning on visualise runs the simulation in pygame, turing it off runs the ABC algorithm
-    main(visualise=False)
+    main(visualise=True)
+
+    # Call the function to plot the accepted parameters
+    # plot_accepted_params("accepted_params")
+    # plot_accepted_params_stacked("accepted_params", EPSILONS, save_path="figs/accepted_params_no-borders_plot.png")
